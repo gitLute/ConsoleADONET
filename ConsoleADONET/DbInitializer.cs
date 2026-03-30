@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Data.SqlClient;
 using System.Globalization;
 
@@ -6,116 +6,100 @@ namespace ConsoleADONET
 {
     public static class DbInitializer
     {
-        public static string Initialize(string connectionString, int tanks_number = 75, int fuels_number = 75, int operations_number = 10000 )
+        public static string Initialize(string connectionString,
+            int tanks_number = 75, int fuels_number = 75, int operations_number = 10000)
         {
-            // Заполнение случайными тестовыми данными трех предварительно созданных таблиц Fuels, Tanks, Operations
-            // Инициализация переменных                                                 
-            string tankType;
-            string tankMaterial;
-            float tankWeight;
-            float tankVolume;
-            string fuelType;
-            float fuelDensity;
-
-            Random randObj = new Random(1);
-            string specifier = "G";
-            CultureInfo culture = CultureInfo.InvariantCulture;
-            DateTime today = DateTime.Now.Date;
-            string strSql;
             string result = "";
-
 
             using (SqlConnection connection = new SqlConnection(connectionString))
             {
-                // Открытие соединения
                 connection.Open();
-                // Проверка существуют ли записи в таблице Fuels
-                SqlCommand check_Fuels = new SqlCommand("SELECT COUNT(*) FROM Fuels;", connection);
-                int RecordsExist = (int)check_Fuels.ExecuteScalar();
 
-                // Собственно заполнение базы данных тестовыми записями
-                if (RecordsExist == 0)
+                // ── Проверяем все три таблицы ─────────────────────────────────
+                // Если хотя бы одна пуста (например, после ручной очистки),
+                // очищаем все три и заполняем заново, чтобы данные были консистентны.
+                SqlCommand countCmd = connection.CreateCommand();
+
+                countCmd.CommandText = "SELECT COUNT(*) FROM Fuels;";
+                int fuelsCount = (int)countCmd.ExecuteScalar();
+
+                countCmd.CommandText = "SELECT COUNT(*) FROM Tanks;";
+                int tanksCount = (int)countCmd.ExecuteScalar();
+
+                countCmd.CommandText = "SELECT COUNT(*) FROM Operations;";
+                int opsCount = (int)countCmd.ExecuteScalar();
+
+                if (fuelsCount > 0 && tanksCount > 0 && opsCount > 0)
+                    return result; // все таблицы заполнены — инициализация не нужна
+
+                SqlTransaction transaction = connection.BeginTransaction();
+                SqlCommand command = connection.CreateCommand();
+                command.Transaction = transaction;
+
+                try
                 {
-                    // Открытие транзакции для выполнения команд вставки данных
-                    SqlTransaction transaction = connection.BeginTransaction();
+                    // Очищаем в правильном порядке: сначала дочерняя (FK), затем родительские
+                    command.CommandText = "DELETE FROM Operations; DELETE FROM Fuels; DELETE FROM Tanks;";
+                    command.ExecuteNonQuery();
 
-                    SqlCommand command = connection.CreateCommand();
-                    command.Transaction = transaction;
-                    try
+                    Random randObj = new Random(1);
+                    string specifier = "G";
+                    CultureInfo culture = CultureInfo.InvariantCulture;
+                    DateTime today = DateTime.Now.Date;
+
+                    // ── Заполнение Tanks ──────────────────────────────────────
+                    string[] tank_voc     = { "Цистерна_", "Ведро_", "Бак_", "Фляга_", "Стакан_" };
+                    string[] material_voc = { "Сталь", "Платина", "Алюминий", "ПЭТ", "Чугун", "Золото", "Дерево", "Керамика" };
+
+                    string strSql = "INSERT INTO Tanks (TankType, TankWeight, TankVolume, TankMaterial) VALUES ";
+                    for (int tankId = 1; tankId <= tanks_number; tankId++)
                     {
-                        // Заполнение таблицы емкостей
-                        // Словари для Tanks
-                        string[] tank_voc = { "Цистерна_", "Ведро_", "Бак_", "Фляга_", "Цистерна_", "Стакан_" };//словарь названий емкостей
-                        string[] material_voc = { "Сталь", "Платина", "Алюминий", "ПЭТ", "Чугун", "Алюминий", "Золото", "Дерево", "Керамика" };//словарь названий материалов емкостей
-                        int count_tank_voc = tank_voc.GetLength(0);
-                        int count_material_voc = material_voc.GetLength(0);
-                        int tankId;
-                        strSql = "INSERT INTO Tanks (TankType, TankWeight, TankVolume, TankMaterial) VALUES ";
-                        for (tankId = 1; tankId <= tanks_number; tankId++)
-                        {
-                            tankType = "N'" + tank_voc[randObj.Next(count_tank_voc)] + tankId.ToString() + "'";
-                            tankMaterial = "N'" + material_voc[randObj.Next(count_material_voc)] + "'";
-                            tankWeight = 500 * (float)randObj.NextDouble();
-                            tankVolume = 200 * (float)randObj.NextDouble();
-                            strSql += "(" + tankType + ", " + tankWeight.ToString(specifier, culture) + ", " + tankVolume.ToString(specifier, culture) + ", " + tankMaterial + "), ";
-                        }
-                        command.CommandText = strSql.TrimEnd(new Char[] { ',', ' ' }) + ";";
-                        // отправляет команду на вставку в базу данных
-                        command.ExecuteNonQuery();
-
-                        // Заполнение таблицы видов топлива
-                        // Словарь для Fuels
-                        string[] fuel_voc = { "Нефть_", "Бензин_", "Керосин_", "Мазут_", "Спирт_", "Водород_" };//словарь названий видов топлива
-                        int count_fuel_voc = fuel_voc.GetLength(0);
-                        int fuelId;
-                        strSql = "INSERT INTO Fuels (FuelType, FuelDensity) VALUES";
-                        for (fuelId = 1; fuelId <= fuels_number; fuelId++)
-                        {
-                            fuelType = "N'" + fuel_voc[randObj.Next(count_fuel_voc)] + fuelId.ToString() + "'";
-                            fuelDensity = 2 * (float)randObj.NextDouble();
-                            strSql += "(" + fuelType + ", " + fuelDensity.ToString(specifier, culture) + "), ";
-                        }
-                        command.CommandText = strSql.TrimEnd(new Char[] { ',', ' ' }) + ";";
-                        // отправляет команду на вставку в базу данных
-                        command.ExecuteNonQuery();
-
-                        // Заполнение таблицы операций
-                        DateTime operationdate;
-                        int inc_exp;
-                        strSql = "INSERT INTO Operations (TankId, FuelId, Inc_Exp, Date) VALUES";
-                        string strSqlValues;
-                        for (int operationId = 1; operationId <= operations_number; operationId++)
-                        {
-                            tankId = randObj.Next(1, tanks_number - 1);
-                            fuelId = randObj.Next(1, fuels_number - 1);
-                            inc_exp = randObj.Next(200) - 100;
-                            operationdate = today.AddDays(-operationId);
-                            strSqlValues = strSql + "(" + tankId + ", " + fuelId + ", " +
-                                inc_exp.ToString(specifier, culture) + ", " +
-                                "'" + operationdate.ToString(culture) + "');";
-                            //отправляет команду на вставку в базу данных
-                            command.CommandText = strSqlValues;
-                            command.ExecuteNonQuery();
-                        }
-
-
-                        // подтверждаем транзакцию
-                        transaction.Commit();
-
+                        string tankType     = "N'" + tank_voc[randObj.Next(tank_voc.Length)]     + tankId + "'";
+                        string tankMaterial = "N'" + material_voc[randObj.Next(material_voc.Length)] + "'";
+                        float  tankWeight   = 500 * (float)randObj.NextDouble();
+                        float  tankVolume   = 200 * (float)randObj.NextDouble();
+                        strSql += $"({tankType}, {tankWeight.ToString(specifier, culture)}, {tankVolume.ToString(specifier, culture)}, {tankMaterial}), ";
                     }
-                    // Обработка ошибок внутри транзакции
-                    catch (Exception ex)
+                    command.CommandText = strSql.TrimEnd(',', ' ') + ";";
+                    command.ExecuteNonQuery();
+
+                    // ── Заполнение Fuels ──────────────────────────────────────
+                    string[] fuel_voc = { "Нефть_", "Бензин_", "Керосин_", "Мазут_", "Спирт_", "Водород_" };
+
+                    strSql = "INSERT INTO Fuels (FuelType, FuelDensity) VALUES ";
+                    for (int fuelId = 1; fuelId <= fuels_number; fuelId++)
                     {
-                        result = ex.Message;
-                        Console.WriteLine($"Ошибка при заполнении тестовым набором: {result}");
-                        transaction.Rollback();
+                        string fuelType    = "N'" + fuel_voc[randObj.Next(fuel_voc.Length)] + fuelId + "'";
+                        float  fuelDensity = 2 * (float)randObj.NextDouble();
+                        strSql += $"({fuelType}, {fuelDensity.ToString(specifier, culture)}), ";
+                    }
+                    command.CommandText = strSql.TrimEnd(',', ' ') + ";";
+                    command.ExecuteNonQuery();
+
+                    // ── Заполнение Operations (по одной строке — FK-ключи из уже вставленных) ──
+                    for (int opId = 1; opId <= operations_number; opId++)
+                    {
+                        int      tankId    = randObj.Next(1, tanks_number);
+                        int      fuelId    = randObj.Next(1, fuels_number);
+                        int      inc_exp   = randObj.Next(200) - 100;
+                        DateTime opDate    = today.AddDays(-opId);
+                        command.CommandText =
+                            $"INSERT INTO Operations (TankId, FuelId, Inc_Exp, Date) VALUES " +
+                            $"({tankId}, {fuelId}, {inc_exp.ToString(specifier, culture)}, '{opDate.ToString(culture)}');";
+                        command.ExecuteNonQuery();
                     }
 
+                    transaction.Commit();
+                    Console.WriteLine($"База данных инициализирована: {tanks_number} ёмкостей, {fuels_number} видов топлива, {operations_number} операций.");
+                }
+                catch (Exception ex)
+                {
+                    result = ex.Message;
+                    Console.WriteLine($"Ошибка при инициализации: {result}");
+                    transaction.Rollback();
                 }
             }
             return result;
-
         }
     }
-
 }

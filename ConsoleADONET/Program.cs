@@ -1,138 +1,130 @@
-﻿using System;
+using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Data.SqlClient;
+using ConsoleADONET.Data;
 
 namespace ConsoleADONET
 {
+    /// <summary>
+    /// Точка входа. Отвечает только за последовательность демонстраций.
+    /// Вся логика работы с БД вынесена в CommandExamples и DataAdapterExamples.
+    /// </summary>
     class Program
     {
         static void Main(string[] args)
         {
-            // Считывание строки подключения из конфигурационного файла  
-            string connectionString = System.Configuration.ConfigurationManager.ConnectionStrings["toplivoConnectionString"].ConnectionString;
+            // Считывает строку подключения из App.config (ключ "toplivoConnectionString")
+            string connectionString = System.Configuration.ConfigurationManager
+                .ConnectionStrings["toplivoConnectionString"].ConnectionString;
 
-            // Инициализация базы данных  
-            string initializeResult = DbInitializer.Initialize(connectionString);
+            // Заполняет таблицы тестовыми данными, если они пусты
+            DbInitializer.Initialize(connectionString);
 
-            // Выполнение операций  
+            // Открывает подключение и выполняет демонстрации
             using (SqlConnection connection = new SqlConnection(connectionString))
             {
                 try
                 {
                     connection.Open();
-                    Console.WriteLine("Подключение открыто");
+                    Console.WriteLine("Подключение открыто\n");
 
-                    ExecuteAndPrint(connection, Select1, "Выборка данных 1");
-                    ExecuteAndPrint(connection, Select2, "Выборка данных 2");
-                    ExecuteAndPrint(connection, Select3, "Выборка данных 3");
-                    Console.WriteLine("====== Вставка данных (нажмите любую клавишу) ========");
-                    Console.ReadKey();
+                    // ====================================================
+                    // ВЫБОРКА (SELECT)
+                    // ====================================================
 
-                    Console.WriteLine(Insert(connection, "InsertProcedure1"));
-                    Console.WriteLine(Insert(connection, "InsertProcedure2"));
-                    Console.WriteLine(Insert(connection, "InsertProcedure3"));
+                    RunAndPrint(connection, CommandExamples.SelectViaCommand,
+                        "SELECT | SqlCommand + SqlDataReader -> List<Tank>");
+
+                    RunAndPrint(connection, CommandExamples.SelectViaStoredProcedure,
+                        "SELECT | SqlCommand + хранимая процедура uspGetOperations");
+
+                    RunAndPrint(connection, DataAdapterExamples.SelectViaDataAdapter,
+                        "SELECT | SqlDataAdapter.Fill() -> DataTable");
+
+                    RunAndPrint(connection, CommandExamples.SelectJoinViaCommand,
+                        "SELECT | INNER JOIN трёх таблиц (Operations + Fuels + Tanks) через SqlCommand");
+
+                    RunAndPrint(connection, DataAdapterExamples.SelectJoinViaDataAdapter,
+                        "SELECT | LEFT JOIN двух таблиц (Fuels + Operations) через SqlDataAdapter");
+
+                    // ────────────────────────────────────────────────────
+                    Pause("SELECT | ExecuteScalar: COUNT / MAX / MIN / AVG");
+                    CommandExamples.DemoExecuteScalar(connection);
+
+                    // ====================================================
+                    // ВСТАВКА (INSERT)
+                    // ====================================================
+
+                    Pause("INSERT | SqlCommand + параметры (Add против AddWithValue)");
+                    Console.WriteLine(CommandExamples.InsertViaCommand(connection));
+
+                    Pause("INSERT | SqlCommand + хранимая процедура uspInsertTanks");
+                    Console.WriteLine(CommandExamples.InsertViaStoredProcedure(connection));
+
+                    Pause("INSERT | SqlDataAdapter + InsertCommand");
+                    Console.WriteLine(DataAdapterExamples.InsertViaDataAdapter(connection));
+
+                    // ====================================================
+                    // ОБНОВЛЕНИЕ (UPDATE)
+                    // ====================================================
+
+                    Pause("UPDATE | SqlCommand + параметры");
+                    Console.WriteLine(CommandExamples.UpdateViaCommand(connection));
+
+                    Pause("UPDATE | SqlDataAdapter + UpdateCommand + DataRowVersion.Original");
+                    Console.WriteLine(DataAdapterExamples.UpdateViaDataAdapter(connection));
+
+                    // ====================================================
+                    // УДАЛЕНИЕ (DELETE)
+                    // ====================================================
+
+                    Pause("DELETE | SqlCommand + параметры");
+                    Console.WriteLine(CommandExamples.DeleteViaCommand(connection));
+
+                    Pause("DELETE | SqlDataAdapter + DeleteCommand");
+                    Console.WriteLine(DataAdapterExamples.DeleteViaDataAdapter(connection));
+
+                    // ====================================================
+                    // ДОПОЛНИТЕЛЬНО
+                    // ====================================================
+
+                    Pause("SqlCommandBuilder | автогенерация INSERT / UPDATE / DELETE");
+                    Console.WriteLine(DataAdapterExamples.DemoSqlCommandBuilder(connection));
+
+                    Pause("DataSet + DataRelation | несколько таблиц, навигация без JOIN");
+                    DataAdapterExamples.DemoDataRelation(connection);
                 }
                 catch (SqlException ex)
                 {
-                    Console.WriteLine($"Ошибка подключения: {ex.Message}");
+                    Console.WriteLine($"Ошибка SQL: {ex.Message}");
                 }
                 finally
                 {
-                    Console.WriteLine("Подключение закрыто");
+                    Console.WriteLine("\nПодключение закрыто");
                 }
             }
 
-            Console.Read();
-        }
-
-        static void ExecuteAndPrint(SqlConnection connection, Func<SqlConnection, IList> selectMethod, string operationDescription)
-        {
-            Console.WriteLine($"====== {operationDescription} (нажмите любую клавишу) ========");
+            Console.WriteLine("\nГотово. Нажмите любую клавишу для выхода.");
             Console.ReadKey();
-            IList results = selectMethod(connection);
-            Print(results);
         }
 
-        static void Print(IList items)
+        // ── Вспомогательные методы ────────────────────────────────────────
+
+        static void Pause(string description)
         {
+            Console.WriteLine($"\n====== {description} (нажмите любую клавишу) ======");
+            Console.ReadKey();
+        }
+
+        static void RunAndPrint(SqlConnection connection,
+            Func<SqlConnection, IList> method, string description)
+        {
+            Pause(description);
+            IList items = method(connection);
             Console.WriteLine("Записи:");
             foreach (var item in items)
-            {
-                Console.WriteLine(item.ToString());
-            }
+                Console.WriteLine(item);
             Console.WriteLine();
-        }
-
-        static IList Select1(SqlConnection connection)
-        {
-            List<string> results = new List<string>();
-            SqlCommand sqlCommand = new SqlCommand("SELECT TOP 7 * FROM Fuels;", connection);
-            using (SqlDataReader reader = sqlCommand.ExecuteReader())
-            {
-                if (reader.HasRows)
-                {
-                    Console.WriteLine("{0}\t{1}\t{2}", reader.GetName(0), reader.GetName(1), reader.GetName(2));
-                    while (reader.Read())
-                    {
-                        object fld1 = reader.GetValue(0);
-                        object fld2 = reader.GetValue(1);
-                        object fld3 = reader.GetValue(2);
-                        results.Add($"{fld1}\t{fld2}\t{fld3}");
-                    }
-                }
-            }
-            return results;
-        }
-
-        static IList Select2(SqlConnection connection)
-        {
-            // Реализация Select2  
-            return new List<string>();
-        }
-
-        static IList Select3(SqlConnection connection)
-        {
-            // Реализация Select3  
-            return new List<string>();
-        }
-
-        static string Insert(SqlConnection connection, string procedureName)
-        {
-            string message = "";
-            using (SqlTransaction transaction = connection.BeginTransaction())
-            {
-                SqlCommand command = new SqlCommand(procedureName, connection)
-                {
-                    Transaction = transaction
-                };
-                try
-                {
-                    int rowsAffected = command.ExecuteNonQuery();
-                    transaction.Commit();
-                    message = $"Данные успешно вставлены. Количество добавленных записей: {rowsAffected}.";
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Ошибка подключения или вставки: {ex.Message}");
-                    transaction.Rollback();
-                    message = "Ошибка вставки данных.";
-                }
-            }
-            return message;
-        }
-
-        static string Update(SqlConnection connection, string procedureName)
-        {
-            // Реализация Update  
-            return "Обновление завершено.";
-        }
-
-        static string Delete(SqlConnection connection, string procedureName)
-        {
-            // Реализация Delete  
-            return "Удаление завершено.";
         }
     }
 }
-

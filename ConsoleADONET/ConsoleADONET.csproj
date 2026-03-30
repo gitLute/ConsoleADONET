@@ -45,7 +45,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Data\CommandExamples.cs" />
+    <Compile Include="Data\DataAdapterExamples.cs" />
     <Compile Include="DbInitializer.cs" />
+    <Compile Include="Models\Fuel.cs" />
+    <Compile Include="Models\Tank.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
