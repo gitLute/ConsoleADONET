@@ -1,6 +1,6 @@
-using System;
 using System.Collections;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 using ConsoleADONET.Data;
 
 namespace ConsoleADONET
@@ -13,9 +13,14 @@ namespace ConsoleADONET
     {
         static void Main(string[] args)
         {
-            // Считывает строку подключения из App.config (ключ "toplivoConnectionString")
-            string connectionString = System.Configuration.ConfigurationManager
-                .ConnectionStrings["toplivoConnectionString"].ConnectionString;
+            // Загрузка конфигурации из appsettings.json
+            var config = new ConfigurationBuilder()
+                .SetBasePath(AppContext.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
+
+            string connectionString = config.GetConnectionString("toplivoConnectionString") 
+                ?? throw new InvalidOperationException("Строка подключения 'toplivoConnectionString' не найдена в appsettings.json");
 
             // Заполняет таблицы тестовыми данными, если они пусты
             DbInitializer.Initialize(connectionString);
