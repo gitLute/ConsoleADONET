@@ -1,105 +1,134 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.Data.SqlClient;
-using System.Globalization;
 
 namespace ConsoleADONET
 {
     public static class DbInitializer
     {
-        public static string Initialize(string connectionString,
-            int tanks_number = 75, int fuels_number = 75, int operations_number = 10000)
+        // Количество записей по требованию п.3.1
+        private const int DictCount = 100;      // Сторона "один"
+        private const int OperCount = 10000;    // Сторона "многие"
+
+        public static void Initialize(string connectionString)
         {
-            string result = "";
+            using var conn = new SqlConnection(connectionString);
+            conn.Open();
 
-            using (SqlConnection connection = new SqlConnection(connectionString))
+            // Проверка: если хотя бы одна таблица уже заполнена, пропускаем инициализацию
+            using var checkCmd = new SqlCommand("SELECT COUNT(*) FROM Positions;", conn);
+            if ((int)checkCmd.ExecuteScalar() > 0)
             {
-                connection.Open();
-
-                // ── Проверяем все три таблицы ─────────────────────────────────
-                // Если хотя бы одна пуста (например, после ручной очистки),
-                // очищаем все три и заполняем заново, чтобы данные были консистентны.
-                SqlCommand countCmd = connection.CreateCommand();
-
-                countCmd.CommandText = "SELECT COUNT(*) FROM Fuels;";
-                int fuelsCount = (int)countCmd.ExecuteScalar();
-
-                countCmd.CommandText = "SELECT COUNT(*) FROM Tanks;";
-                int tanksCount = (int)countCmd.ExecuteScalar();
-
-                countCmd.CommandText = "SELECT COUNT(*) FROM Operations;";
-                int opsCount = (int)countCmd.ExecuteScalar();
-
-                if (fuelsCount > 0 && tanksCount > 0 && opsCount > 0)
-                    return result; // все таблицы заполнены — инициализация не нужна
-
-                SqlTransaction transaction = connection.BeginTransaction();
-                SqlCommand command = connection.CreateCommand();
-                command.Transaction = transaction;
-
-                try
-                {
-                    // Очищаем в правильном порядке: сначала дочерняя (FK), затем родительские
-                    command.CommandText = "DELETE FROM Operations; DELETE FROM Fuels; DELETE FROM Tanks;";
-                    command.ExecuteNonQuery();
-
-                    Random randObj = new Random(1);
-                    string specifier = "G";
-                    CultureInfo culture = CultureInfo.InvariantCulture;
-                    DateTime today = DateTime.Now.Date;
-
-                    // ── Заполнение Tanks ──────────────────────────────────────
-                    string[] tank_voc     = { "Цистерна_", "Ведро_", "Бак_", "Фляга_", "Стакан_" };
-                    string[] material_voc = { "Сталь", "Платина", "Алюминий", "ПЭТ", "Чугун", "Золото", "Дерево", "Керамика" };
-
-                    string strSql = "INSERT INTO Tanks (TankType, TankWeight, TankVolume, TankMaterial) VALUES ";
-                    for (int tankId = 1; tankId <= tanks_number; tankId++)
-                    {
-                        string tankType     = "N'" + tank_voc[randObj.Next(tank_voc.Length)]     + tankId + "'";
-                        string tankMaterial = "N'" + material_voc[randObj.Next(material_voc.Length)] + "'";
-                        float  tankWeight   = 500 * (float)randObj.NextDouble();
-                        float  tankVolume   = 200 * (float)randObj.NextDouble();
-                        strSql += $"({tankType}, {tankWeight.ToString(specifier, culture)}, {tankVolume.ToString(specifier, culture)}, {tankMaterial}), ";
-                    }
-                    command.CommandText = strSql.TrimEnd(',', ' ') + ";";
-                    command.ExecuteNonQuery();
-
-                    // ── Заполнение Fuels ──────────────────────────────────────
-                    string[] fuel_voc = { "Нефть_", "Бензин_", "Керосин_", "Мазут_", "Спирт_", "Водород_" };
-
-                    strSql = "INSERT INTO Fuels (FuelType, FuelDensity) VALUES ";
-                    for (int fuelId = 1; fuelId <= fuels_number; fuelId++)
-                    {
-                        string fuelType    = "N'" + fuel_voc[randObj.Next(fuel_voc.Length)] + fuelId + "'";
-                        float  fuelDensity = 2 * (float)randObj.NextDouble();
-                        strSql += $"({fuelType}, {fuelDensity.ToString(specifier, culture)}), ";
-                    }
-                    command.CommandText = strSql.TrimEnd(',', ' ') + ";";
-                    command.ExecuteNonQuery();
-
-                    // ── Заполнение Operations (по одной строке — FK-ключи из уже вставленных) ──
-                    for (int opId = 1; opId <= operations_number; opId++)
-                    {
-                        int      tankId    = randObj.Next(1, tanks_number);
-                        int      fuelId    = randObj.Next(1, fuels_number);
-                        int      inc_exp   = randObj.Next(200) - 100;
-                        DateTime opDate    = today.AddDays(-opId);
-                        command.CommandText =
-                            $"INSERT INTO Operations (TankId, FuelId, Inc_Exp, Date) VALUES " +
-                            $"({tankId}, {fuelId}, {inc_exp.ToString(specifier, culture)}, '{opDate.ToString(culture)}');";
-                        command.ExecuteNonQuery();
-                    }
-
-                    transaction.Commit();
-                    Console.WriteLine($"База данных инициализирована: {tanks_number} ёмкостей, {fuels_number} видов топлива, {operations_number} операций.");
-                }
-                catch (Exception ex)
-                {
-                    result = ex.Message;
-                    Console.WriteLine($"Ошибка при инициализации: {result}");
-                    transaction.Rollback();
-                }
+                Console.WriteLine("База данных уже инициализирована. Пропуск генерации данных.");
+                return;
             }
-            return result;
+
+            using var tx = conn.BeginTransaction();
+            try
+            {
+                // Очистка в обратном порядке зависимостей
+                new SqlCommand("DELETE FROM StolenCars; DELETE FROM Cars; DELETE FROM Employees; DELETE FROM Drivers; DELETE FROM CarBrands; DELETE FROM Ranks; DELETE FROM Positions;", conn, tx).ExecuteNonQuery();
+
+                var rnd = new Random(42);
+                var posIds = new List<int>();
+                var rankIds = new List<int>();
+                var brandIds = new List<int>();
+                var driverIds = new List<int>();
+                var empIds = new List<int>();
+                var carIds = new List<int>();
+
+                Console.WriteLine("Генерация справочников (≥100 записей)...");
+                
+                // 1. Positions (100)
+                for (int i = 1; i <= DictCount; i++)
+                    posIds.Add(ExecuteInsertSp(conn, tx, "uspInsertPosition",
+                        ("@Name", $"Должность_{i}"), ("@Salary", 1000 + rnd.Next(2000)),
+                        ("@Responsibilities", "Контроль"), ("@Requirements", "Образование")));
+
+                // 2. Ranks (100)
+                for (int i = 1; i <= DictCount; i++)
+                    rankIds.Add(ExecuteInsertSp(conn, tx, "uspInsertRank",
+                        ("@Name", $"Звание_{i}"), ("@Allowance", 500 + rnd.Next(1000)),
+                        ("@Responsibilities", "Руководство"), ("@Requirements", "Стаж")));
+
+                // 3. CarBrands (100)
+                string[] countries = { "Беларусь", "Германия", "Япония", "США", "Китай" };
+                for (int i = 1; i <= DictCount; i++)
+                    brandIds.Add(ExecuteInsertSp(conn, tx, "uspInsertCarBrand",
+                        ("@Name", $"Марка_{i}"), ("@Manufacturer", $"Завод_{i}"),
+                        ("@CountryOfOrigin", countries[rnd.Next(countries.Length)]),
+                        ("@Category", "B"), ("@Description", "Легковой")));
+
+                // 4. Drivers (100)
+                for (int i = 1; i <= DictCount; i++)
+                    driverIds.Add(ExecuteInsertSp(conn, tx, "uspInsertDriver",
+                        ("@FullName", $"Водитель {i}"), ("@BirthDate", DateTime.Today.AddYears(-rnd.Next(20, 50))),
+                        ("@LicenseNumber", $"LIC{i:D6}"), ("@LicenseCategory", "B")));
+
+                Console.WriteLine("Генерация оперативных таблиц (≥10000 записей)...");
+
+                // 5. Employees (100) -> зависит от Positions и Ranks
+                for (int i = 1; i <= DictCount; i++)
+                    empIds.Add(ExecuteInsertSp(conn, tx, "uspInsertEmployee",
+                        ("@FullName", $"Сотрудник {i}"), ("@Age", 25 + rnd.Next(30)),
+                        ("@Gender", rnd.Next(2) == 0 ? "М" : "Ж"),
+                        ("@PositionId", posIds[rnd.Next(posIds.Count)]),
+                        ("@RankId", rankIds[rnd.Next(rankIds.Count)])));
+
+                // 6. Cars (10000) -> зависит от Drivers, CarBrands, Employees
+                string[] colors = { "Черный", "Белый", "Синий", "Красный", "Серый" };
+                for (int i = 1; i <= OperCount; i++)
+                {
+                    int carId = ExecuteInsertSp(conn, tx, "uspInsertCar",
+                        ("@DriverId", driverIds[rnd.Next(driverIds.Count)]),
+                        ("@BrandId", brandIds[rnd.Next(brandIds.Count)]),
+                        ("@RegistrationNumber", $"{rnd.Next(1000, 9999)} AB-{rnd.Next(1, 8)}"),
+                        ("@Color", colors[rnd.Next(colors.Length)]),
+                        ("@TechInspectionStatus", "Пройден"),
+                        ("@RegisteringEmployeeId", empIds[rnd.Next(empIds.Count)]));
+                    carIds.Add(carId);
+                }
+
+                // 7. StolenCars (10000) -> зависит от Cars, Employees
+                string[] circumstances = { "Угнан с парковки", "Взлом замка", "Разбойное нападение", "Эвакуация" };
+                for (int i = 1; i <= OperCount; i++)
+                {
+                    DateTime theftDate = DateTime.Today.AddDays(-rnd.Next(1, 365));
+                    ExecuteInsertSp(conn, tx, "uspInsertStolenCar",
+                        ("@TheftDate", theftDate),
+                        ("@ReportDate", theftDate.AddHours(rnd.Next(1, 12))),
+                        ("@CarId", carIds[rnd.Next(carIds.Count)]),
+                        ("@TheftCircumstances", circumstances[rnd.Next(circumstances.Length)]),
+                        ("@IsFound", rnd.Next(2) == 1),
+                        ("@RegisteringEmployeeId", empIds[rnd.Next(empIds.Count)]));
+                }
+
+                tx.Commit();
+                Console.WriteLine($"Инициализация завершена: {DictCount} справочных записей, {OperCount * 2} оперативных записей.");
+            }
+            catch (Exception ex)
+            {
+                tx.Rollback();
+                Console.WriteLine($"Ошибка инициализации БД: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Универсальный вызов хранимой процедуры вставки с возвратом @NewId
+        /// </summary>
+        private static int ExecuteInsertSp(SqlConnection conn, SqlTransaction tx, string spName, params (string Name, object Value)[] parameters)
+        {
+            using var cmd = new SqlCommand(spName, conn, tx) { CommandType = System.Data.CommandType.StoredProcedure };
+            
+            foreach (var p in parameters)
+                cmd.Parameters.AddWithValue(p.Name, p.Value ?? DBNull.Value);
+
+            var outParam = new SqlParameter("@NewId", System.Data.SqlDbType.Int) { Direction = System.Data.ParameterDirection.Output };
+            cmd.Parameters.Add(outParam);
+
+            cmd.ExecuteNonQuery();
+            return (int)outParam.Value;
         }
     }
 }
