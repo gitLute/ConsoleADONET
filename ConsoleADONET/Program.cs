@@ -8,9 +8,11 @@ namespace ConsoleADONET
     {
         static void Main(string[] args)
         {
-            string connectionString = System.Configuration.ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
+            // Чтение строки подключения из App.config
+            string connectionString = System.Configuration.ConfigurationManager
+                .ConnectionStrings["DefaultConnection"].ConnectionString;
 
-            Console.WriteLine("=== Инициализация базы данных (п. 3.1) ===");
+            Console.WriteLine("=== Инициализация базы данных ==="); // п. 3.1
             DbInitializer.Initialize(connectionString);
 
             using var connection = new SqlConnection(connectionString);
@@ -19,6 +21,7 @@ namespace ConsoleADONET
 
             try
             {
+                // ПУНКТ 3.2
                 RunAndPrint(connection, conn => CommandExamples.SelectEmployeesWithPositions(conn),
                     "ЗАПРОС 1 | Сотрудники и их должности");
 
@@ -28,7 +31,7 @@ namespace ConsoleADONET
                 RunAndPrint(connection, conn => CommandExamples.SelectTheftsLastMonth(conn),
                     "ЗАПРОС 3 | Угоны за прошлый месяц");
 
-                // Двойная реализация SELECT (требование п.3.2)
+                // Двойная реализация SELECT (п.3.2)
                 RunAndPrint(connection, conn => CommandExamples.SelectEmployeesByPosition_Command(conn, "Должность_1"),
                     "ЗАПРОС 4 | Сотрудники по должности (SqlCommand)");
                 RunAndPrint(connection, conn => DataAdapterExamples.SelectEmployeesByPosition_DataAdapter(conn, "Должность_1"),
@@ -43,7 +46,7 @@ namespace ConsoleADONET
                 RunAndPrint(connection, conn => CommandExamples.SelectTechInspectionCountByYear(conn),
                     "ЗАПРОС 7 | Количество авто, прошедших ТО, по годам");
 
-                // Двойная реализация DML (требование п.3.2)
+                // Двойная реализация DML (п.3.2)
                 Pause("ОПЕРАЦИЯ 8 | Добавление водителя (SqlCommand)");
                 Console.WriteLine(CommandExamples.InsertDriver_Command(connection, "Иванов Иван Иванович", "AB123456"));
 
@@ -55,6 +58,10 @@ namespace ConsoleADONET
 
                 Pause("ОПЕРАЦИЯ 10 | Удаление данных о водителе (ID=2)");
                 Console.WriteLine(CommandExamples.DeleteDriver(connection, 2));
+
+                // ПУНКТ 3.3
+                Pause("ДЕМОНСТРАЦИЯ 3.3 | Атомарность и откат транзакции");
+                TransactionExamples.DemonstrateAtomicityAndRollback(connection);
             }
             catch (SqlException ex)
             {
