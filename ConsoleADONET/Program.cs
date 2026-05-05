@@ -1,3 +1,5 @@
+using System;
+using System.Text;
 using System.Collections;
 using System.Data;
 using ConsoleADONET.Data;
@@ -9,6 +11,9 @@ namespace ConsoleADONET
     {
         static void Main(string[] args)
         {
+            Console.OutputEncoding = Encoding.UTF8;
+            Console.InputEncoding = Encoding.UTF8;
+            
             // Чтение строки подключения из App.config
             string connectionString = System.Configuration.ConfigurationManager
                 .ConnectionStrings["DefaultConnection"].ConnectionString;
