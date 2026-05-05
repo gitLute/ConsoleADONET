@@ -469,31 +469,3 @@ BEGIN
     END CATCH
 END;
 GO
-
--- Операция 11: сотрудники по должности
-IF OBJECT_ID('uspGetEmployeesByPosition', 'P') IS NOT NULL
-DROP PROCEDURE uspGetEmployeesByPosition;
-GO
-CREATE PROCEDURE uspGetEmployeesByPosition
-    @PositionName NVARCHAR(100) = N''
-AS
-BEGIN
-    SET NOCOUNT ON;
-    
-    SELECT 
-        e.Id,
-        e.FullName,
-        e.Age,
-        e.Gender,
-        e.Address,
-        e.Phone,
-        e.PassportDetails,
-        p.Name AS PositionName,
-        r.Name AS RankName
-    FROM Employees e
-    INNER JOIN Positions p ON e.PositionId = p.Id
-    INNER JOIN Ranks r ON e.RankId = r.Id
-    WHERE 
-        (@PositionName = N'' OR p.Name LIKE (@PositionName + N'%'));
-END;
-GO
