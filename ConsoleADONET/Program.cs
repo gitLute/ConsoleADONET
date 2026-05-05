@@ -63,6 +63,10 @@ namespace ConsoleADONET
                 // ПУНКТ 3.4: Уровни изоляции транзакций
                 Pause("ДЕМОНСТРАЦИЯ 3.4 | Уровни изоляции транзакций");
                 RunIsolationLevelDemo(connection);
+
+                // ПУНКТ 3.5: Взаимная блокировка (Deadlock)
+                Pause("ДЕМОНСТРАЦИЯ 3.5 | Взаимная блокировка (Deadlock)");
+                RunDeadlockDemo(connection);
             }
             catch (SqlException ex)
             {
@@ -78,7 +82,7 @@ namespace ConsoleADONET
         }
 
         /// <summary>
-        /// Интерактивное меню для запуска теста уровней изоляции в двух экземплярах.
+        /// Интерактивное меню для запуска теста уровней изоляции (п.3.4)
         /// </summary>
         static void RunIsolationLevelDemo(SqlConnection connection)
         {
@@ -100,7 +104,33 @@ namespace ConsoleADONET
                     TransactionExamples.Reader_IsolationTest(connection, IsolationLevel.ReadUncommitted);
                     break;
                 default:
-                    Console.WriteLine("3.4 пропущен");
+                    Console.WriteLine("Демонстрация 3.4 пропущена.");
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Интерактивное меню для запуска теста взаимной блокировки (п.3.5)
+        /// </summary>
+        static void RunDeadlockDemo(SqlConnection connection)
+        {
+            Console.WriteLine("\n--- ТРЕБОВАНИЕ п.3.5: Запустите ДВА экземпляра приложения ОДНОВРЕМЕННО ---");
+            Console.WriteLine("1. В ПЕРВОМ окне выберите '1 - Поток А'.");
+            Console.WriteLine("2. СРАЗУ ЖЕ (в течение 3 сек) во ВТОРОМ окне выберите '2 - Поток Б'.");
+            Console.WriteLine("   SQL Server автоматически обнаружит цикл ожиданий и завершит одну транзакцию ошибкой 1205.");
+            Console.Write("Выберите роль (1-Поток А, 2-Поток Б, 0-Пропуск): ");
+
+            string choice = Console.ReadLine()?.Trim();
+            switch (choice)
+            {
+                case "1":
+                    TransactionExamples.Deadlock_ThreadA(connection);
+                    break;
+                case "2":
+                    TransactionExamples.Deadlock_ThreadB(connection);
+                    break;
+                default:
+                    Console.WriteLine("Демонстрация 3.5 пропущена.");
                     break;
             }
         }

@@ -1,11 +1,12 @@
 using System;
 using System.Data;
+using System.Threading;
 using Microsoft.Data.SqlClient;
 
 namespace ConsoleADONET.Data
 {
     /// <summary>
-    /// Демонстрация принципа атомарности (п. 3.3) и уровней изоляции транзакций (п. 3.4).
+    /// Демонстрация принципа атомарности (п. 3.3), уровней изоляции (п. 3.4) и взаимных блокировок (п. 3.5).
     /// </summary>
     public static class TransactionExamples
     {
@@ -71,8 +72,8 @@ namespace ConsoleADONET.Data
             cmd.ExecuteNonQuery();
 
             Console.WriteLine($"[ПИСАТЕЛЬ] Изменен адрес водителя ID={testId} на 'ГРЯЗНЫЙ_АДРЕС_ПИСАТЕЛЯ'.");
-            Console.WriteLine("[ПИСАТЕЛЬ] Транзакция АКТИВНА. Commit НЕ выполнен. Строка заблокирована (X-lock).");
-            Console.WriteLine("[ПИСАТЕЛЬ] >>> Теперь запустите ВТОРОЙ экземпляр приложения в режиме ЧИТАТЕЛЯ <<<");
+            // Console.WriteLine("[ПИСАТЕЛЬ] Транзакция АКТИВНА. Commit НЕ выполнен. Строка заблокирована (X-lock).");
+            // Console.WriteLine("[ПИСАТЕЛЬ] >>> Теперь запустите ВТОРОЙ экземпляр приложения в режиме ЧИТАТЕЛЯ <<<");
             Console.WriteLine("[ПИСАТЕЛЬ] Нажмите ENTER, чтобы откатить транзакцию (Rollback) и завершить тест...");
             Console.ReadLine();
 
@@ -92,8 +93,7 @@ namespace ConsoleADONET.Data
             using var cmd = new SqlCommand("SELECT Address FROM Drivers WHERE Id = @Id", conn, transaction);
             cmd.Parameters.AddWithValue("@Id", testId);
 
-            // Таймаут 5 сек для демонстрации: чтобы приложение не висело бесконечно, 
-            // а наглядно показало блокировку и выбросило исключение.
+            // Таймаут 5 сек для демонстрации блокировки
             cmd.CommandTimeout = 5;
 
             try
@@ -106,24 +106,116 @@ namespace ConsoleADONET.Data
                 if (level == IsolationLevel.ReadUncommitted)
                 {
                     Console.WriteLine("[ЧИТАТЕЛЬ] ГРЯЗНОЕ ЧТЕНИЕ (Dirty Read) сработало!");
-                    Console.WriteLine("[ЧИТАТЕЛЬ] Данные считаны, несмотря на то что Писатель еще не сделал Commit.");
-                    Console.WriteLine("[ЧИТАТЕЛЬ] Риск: если Писатель выполнит Rollback, эти данные окажутся неверными.");
+                    // Console.WriteLine("[ЧИТАТЕЛЬ] Данные считаны, несмотря на то что Писатель еще не сделал Commit.");
+                    // Console.WriteLine("[ЧИТАТЕЛЬ] Риск: если Писатель выполнит Rollback, эти данные окажутся неверными.");
                 }
                 transaction.Commit();
             }
             catch (SqlException ex) when (ex.Number == -2) // -2 = Timeout Expired
             {
                 Console.WriteLine($"[ЧИТАТЕЛЬ] ТАЙМАУТ! Чтение заблокировано.");
-                Console.WriteLine("[ЧИТАТЕЛЬ] ОБЪЯСНЕНИЕ (ReadCommitted):");
-                Console.WriteLine("   - Писатель удерживает эксклюзивную блокировку (X-lock) на строке.");
-                Console.WriteLine("   - Уровень ReadCommitted разрешает читать ТОЛЬКО зафиксированные данные.");
-                Console.WriteLine("   - Читатель принудительно ждет, пока Писатель освободит ресурс (Commit/Rollback).");
-                Console.WriteLine("   - Это гарантирует целостность, но снижает параллелизм (приложение 'виснет').");
+                // Console.WriteLine("[ЧИТАТЕЛЬ] ОБЪЯСНЕНИЕ (ReadCommitted):");
+                // Console.WriteLine("   - Писатель удерживает эксклюзивную блокировку (X-lock) на строке.");
+                // Console.WriteLine("   - Уровень ReadCommitted разрешает читать ТОЛЬКО зафиксированные данные.");
+                // Console.WriteLine("   - Читатель принудительно ждет, пока Писатель освободит ресурс (Commit/Rollback).");
+                // Console.WriteLine("   - Это гарантирует целостность, но снижает параллелизм (приложение 'виснет').");
                 transaction.Rollback();
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[ЧИТАТЕЛЬ] Ошибка: {ex.Message}");
+                transaction.Rollback();
+            }
+        }
+
+        /// <summary>
+        /// Поток А: Блокирует Ресурс 1 (ID=1), ждет, затем пытается заблокировать Ресурс 2 (ID=2).
+        /// </summary>
+        public static void Deadlock_ThreadA(SqlConnection conn)
+        {
+            Console.WriteLine("\n=== [ПОТОК А] Тест Deadlock (п. 3.5) ===");
+            int id1 = 1;
+            int id2 = 2;
+
+            using var transaction = conn.BeginTransaction();
+            using var cmd = new SqlCommand("", conn, transaction);
+
+            try
+            {
+                // 1. Захват Ресурса 1
+                cmd.CommandText = "UPDATE Drivers SET Address = N'LOCKED_BY_A_1' WHERE Id = @Id";
+                cmd.Parameters.AddWithValue("@Id", id1);
+                cmd.ExecuteNonQuery();
+                Console.WriteLine($"[ПОТОК А] Захвачен Ресурс 1 (Driver ID={id1}). Жду 3 сек...");
+
+                Thread.Sleep(3000); // Имитация работы, даем время Потоку Б захватить Ресурс 2
+
+                // 2. Попытка захвата Ресурса 2
+                Console.WriteLine($"[ПОТОК А] Пытаюсь захватить Ресурс 2 (Driver ID={id2})...");
+                cmd.Parameters.Clear();
+                cmd.CommandText = "UPDATE Drivers SET Address = N'LOCKED_BY_A_2' WHERE Id = @Id";
+                cmd.Parameters.AddWithValue("@Id", id2);
+                cmd.ExecuteNonQuery(); // Здесь возникнет ожидание или Deadlock
+
+                transaction.Commit();
+                Console.WriteLine("[ПОТОК А] Успешно завершен. Deadlock не произошел (вы оказались быстрее).");
+            }
+            catch (SqlException ex) when (ex.Number == 1205)
+            {
+                Console.WriteLine("[ПОТОК А] DEADLOCK ОБНАРУЖЕН! СУБД выбрала этот поток как 'жертву'.");
+                Console.WriteLine($"[ПОТОК А] Ошибка SQL {ex.Number}: {ex.Message}");
+                transaction.Rollback();
+                Console.WriteLine("[ПОТОК А] Транзакция отменена. Блокировки сняты. Второй поток продолжит работу.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ПОТОК А] ❌ Ошибка: {ex.Message}");
+                transaction.Rollback();
+            }
+        }
+
+        /// <summary>
+        /// Поток Б: Блокирует Ресурс 2 (ID=2), ждет, затем пытается заблокировать Ресурс 1 (ID=1).
+        /// </summary>
+        public static void Deadlock_ThreadB(SqlConnection conn)
+        {
+            Console.WriteLine("\n=== [ПОТОК Б] Тест Deadlock (п. 3.5) ===");
+            int id1 = 1;
+            int id2 = 2;
+
+            using var transaction = conn.BeginTransaction();
+            using var cmd = new SqlCommand("", conn, transaction);
+
+            try
+            {
+                // 1. Захват Ресурса 2 (ОБРАТНЫЙ ПОРЯДОК!)
+                cmd.CommandText = "UPDATE Drivers SET Address = N'LOCKED_BY_B_2' WHERE Id = @Id";
+                cmd.Parameters.AddWithValue("@Id", id2);
+                cmd.ExecuteNonQuery();
+                Console.WriteLine($"[ПОТОК Б] Захвачен Ресурс 2 (Driver ID={id2}). Жду 3 сек...");
+
+                Thread.Sleep(3000); // Имитация работы, даем время Потоку А захватить Ресурс 1
+
+                // 2. Попытка захвата Ресурса 1
+                Console.WriteLine($"[ПОТОК Б] Пытаюсь захватить Ресурс 1 (Driver ID={id1})...");
+                cmd.Parameters.Clear();
+                cmd.CommandText = "UPDATE Drivers SET Address = N'LOCKED_BY_B_1' WHERE Id = @Id";
+                cmd.Parameters.AddWithValue("@Id", id1);
+                cmd.ExecuteNonQuery(); // Здесь возникнет ожидание или Deadlock
+
+                transaction.Commit();
+                Console.WriteLine("[ПОТОК Б] Успешно завершен. Deadlock не произошел (вы оказались быстрее).");
+            }
+            catch (SqlException ex) when (ex.Number == 1205)
+            {
+                Console.WriteLine("[ПОТОК Б] DEADLOCK ОБНАРУЖЕН! СУБД выбрала этот поток как 'жертву'.");
+                Console.WriteLine($"[ПОТОК Б] Ошибка SQL {ex.Number}: {ex.Message}");
+                transaction.Rollback();
+                Console.WriteLine("[ПОТОК Б] Транзакция отменена. Блокировки сняты. Первый поток продолжит работу.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ПОТОК Б] ❌ Ошибка: {ex.Message}");
                 transaction.Rollback();
             }
         }
