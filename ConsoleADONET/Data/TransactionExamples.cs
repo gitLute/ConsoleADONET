@@ -60,7 +60,7 @@ namespace ConsoleADONET.Data
         /// </summary>
         public static void Writer_IsolationTest(SqlConnection conn)
         {
-            Console.WriteLine("\n=== [ПИСАТЕЛЬ] Тест уровней изоляции (п. 3.4) ===");
+            Console.WriteLine("\n=== [Writer_IsolationTest] Тест уровней изоляции (п. 3.4) ===");
             int testId = GetFirstDriverId(conn);
             string originalAddress = GetDriverField(conn, testId, "Address");
 
@@ -71,14 +71,14 @@ namespace ConsoleADONET.Data
             cmd.Parameters.AddWithValue("@Id", testId);
             cmd.ExecuteNonQuery();
 
-            Console.WriteLine($"[ПИСАТЕЛЬ] Изменен адрес водителя ID={testId} на 'ГРЯЗНЫЙ_АДРЕС_ПИСАТЕЛЯ'.");
+            Console.WriteLine($"[Writer_IsolationTest] Изменен адрес водителя ID={testId} на 'ГРЯЗНЫЙ_АДРЕС_ПИСАТЕЛЯ'.");
             // Console.WriteLine("[ПИСАТЕЛЬ] Транзакция АКТИВНА. Commit НЕ выполнен. Строка заблокирована (X-lock).");
             // Console.WriteLine("[ПИСАТЕЛЬ] >>> Теперь запустите ВТОРОЙ экземпляр приложения в режиме ЧИТАТЕЛЯ <<<");
-            Console.WriteLine("[ПИСАТЕЛЬ] Нажмите ENTER, чтобы откатить транзакцию (Rollback) и завершить тест...");
+            Console.WriteLine("[Writer_IsolationTest] Нажмите ENTER, чтобы откатить транзакцию (Rollback) и завершить тест...");
             Console.ReadLine();
 
             transaction.Rollback();
-            Console.WriteLine($"[ПИСАТЕЛЬ] Транзакция отменена. Адрес восстановлен на: {originalAddress}");
+            Console.WriteLine($"[Writer_IsolationTest] Транзакция отменена. Адрес восстановлен на: {originalAddress}");
         }
 
         /// <summary>
@@ -86,7 +86,7 @@ namespace ConsoleADONET.Data
         /// </summary>
         public static void Reader_IsolationTest(SqlConnection conn, IsolationLevel level)
         {
-            Console.WriteLine($"\n=== [ЧИТАТЕЛЬ] Тест уровня изоляции: {level} ===");
+            Console.WriteLine($"\n=== [Reader_IsolationTest] Тест уровня изоляции: {level} ===");
             int testId = GetFirstDriverId(conn);
 
             using var transaction = conn.BeginTransaction(level);
@@ -98,32 +98,25 @@ namespace ConsoleADONET.Data
 
             try
             {
-                Console.WriteLine($"[ЧИТАТЕЛЬ] Попытка чтения адреса водителя ID={testId}...");
+                Console.WriteLine($"[Reader_IsolationTest] Попытка чтения адреса водителя ID={testId}...");
                 var result = cmd.ExecuteScalar();
                 string address = result?.ToString() ?? "(NULL)";
 
-                Console.WriteLine($"[ЧИТАТЕЛЬ] Успешно прочитано: {address}");
+                Console.WriteLine($"[Reader_IsolationTest] Успешно прочитано: {address}");
                 if (level == IsolationLevel.ReadUncommitted)
                 {
-                    Console.WriteLine("[ЧИТАТЕЛЬ] ГРЯЗНОЕ ЧТЕНИЕ (Dirty Read) сработало!");
-                    // Console.WriteLine("[ЧИТАТЕЛЬ] Данные считаны, несмотря на то что Писатель еще не сделал Commit.");
-                    // Console.WriteLine("[ЧИТАТЕЛЬ] Риск: если Писатель выполнит Rollback, эти данные окажутся неверными.");
+                    Console.WriteLine("[Reader_IsolationTest] ГРЯЗНОЕ ЧТЕНИЕ (Dirty Read) сработало!");
                 }
                 transaction.Commit();
             }
             catch (SqlException ex) when (ex.Number == -2) // -2 = Timeout Expired
             {
-                Console.WriteLine($"[ЧИТАТЕЛЬ] ТАЙМАУТ! Чтение заблокировано.");
-                // Console.WriteLine("[ЧИТАТЕЛЬ] ОБЪЯСНЕНИЕ (ReadCommitted):");
-                // Console.WriteLine("   - Писатель удерживает эксклюзивную блокировку (X-lock) на строке.");
-                // Console.WriteLine("   - Уровень ReadCommitted разрешает читать ТОЛЬКО зафиксированные данные.");
-                // Console.WriteLine("   - Читатель принудительно ждет, пока Писатель освободит ресурс (Commit/Rollback).");
-                // Console.WriteLine("   - Это гарантирует целостность, но снижает параллелизм (приложение 'виснет').");
+                Console.WriteLine($"[Reader_IsolationTest] ТАЙМАУТ! Чтение заблокировано.");
                 transaction.Rollback();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ЧИТАТЕЛЬ] Ошибка: {ex.Message}");
+                Console.WriteLine($"[Reader_IsolationTest] Ошибка: {ex.Message}");
                 transaction.Rollback();
             }
         }
@@ -158,11 +151,10 @@ namespace ConsoleADONET.Data
                 cmd.ExecuteNonQuery(); // Здесь возникнет ожидание или Deadlock
 
                 transaction.Commit();
-                Console.WriteLine("[ПОТОК А] Успешно завершен. Deadlock не произошел (вы оказались быстрее).");
+                Console.WriteLine("[ПОТОК А] Успешно завершен. Deadlock не произошел.");
             }
             catch (SqlException ex) when (ex.Number == 1205)
             {
-                Console.WriteLine("[ПОТОК А] DEADLOCK ОБНАРУЖЕН! СУБД выбрала этот поток как 'жертву'.");
                 Console.WriteLine($"[ПОТОК А] Ошибка SQL {ex.Number}: {ex.Message}");
                 transaction.Rollback();
                 Console.WriteLine("[ПОТОК А] Транзакция отменена. Блокировки сняты. Второй поток продолжит работу.");
@@ -204,11 +196,10 @@ namespace ConsoleADONET.Data
                 cmd.ExecuteNonQuery(); // Здесь возникнет ожидание или Deadlock
 
                 transaction.Commit();
-                Console.WriteLine("[ПОТОК Б] Успешно завершен. Deadlock не произошел (вы оказались быстрее).");
+                Console.WriteLine("[ПОТОК Б] Успешно завершен. Deadlock не произошел.");
             }
             catch (SqlException ex) when (ex.Number == 1205)
             {
-                Console.WriteLine("[ПОТОК Б] DEADLOCK ОБНАРУЖЕН! СУБД выбрала этот поток как 'жертву'.");
                 Console.WriteLine($"[ПОТОК Б] Ошибка SQL {ex.Number}: {ex.Message}");
                 transaction.Rollback();
                 Console.WriteLine("[ПОТОК Б] Транзакция отменена. Блокировки сняты. Первый поток продолжит работу.");

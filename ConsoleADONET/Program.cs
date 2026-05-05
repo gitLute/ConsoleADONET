@@ -122,7 +122,6 @@ namespace ConsoleADONET
             Console.WriteLine("\n--- ТРЕБОВАНИЕ п.3.5: Запустите ДВА экземпляра приложения ОДНОВРЕМЕННО ---");
             Console.WriteLine("1. В ПЕРВОМ окне выберите '1 - Поток А'.");
             Console.WriteLine("2. СРАЗУ ЖЕ (в течение 3 сек) во ВТОРОМ окне выберите '2 - Поток Б'.");
-            Console.WriteLine("   SQL Server автоматически обнаружит цикл ожиданий и завершит одну транзакцию ошибкой 1205.");
             Console.Write("Выберите роль (1-Поток А, 2-Поток Б, 0-Пропуск): ");
 
             string choice = Console.ReadLine()?.Trim();
