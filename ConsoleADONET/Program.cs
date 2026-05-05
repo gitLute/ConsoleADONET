@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Data;
 using ConsoleADONET.Data;
 using Microsoft.Data.SqlClient;
 
@@ -21,13 +22,11 @@ namespace ConsoleADONET
 
             try
             {
-                // ПУНКТ 3.2
+                // ПУНКТ 3.2: Запросы и операции
                 RunAndPrint(connection, conn => CommandExamples.SelectEmployeesWithPositions(conn),
                     "ЗАПРОС 1 | Сотрудники и их должности");
-
                 RunAndPrint(connection, conn => CommandExamples.SelectExpiredTechInspections(conn),
                     "ЗАПРОС 2 | Автомобили с просроченным техосмотром");
-
                 RunAndPrint(connection, conn => CommandExamples.SelectTheftsLastMonth(conn),
                     "ЗАПРОС 3 | Угоны за прошлый месяц");
 
@@ -39,10 +38,8 @@ namespace ConsoleADONET
 
                 RunAndPrint(connection, conn => CommandExamples.SelectCarsByDriver(conn, "Водитель 1"),
                     "ЗАПРОС 5 | Автомобили определенного владельца");
-
                 RunAndPrint(connection, conn => CommandExamples.SelectFoundStolenCarsPivot(conn),
                     "ЗАПРОС 6 | PIVOT: Найденные угнанные авто по годам и маркам");
-
                 RunAndPrint(connection, conn => CommandExamples.SelectTechInspectionCountByYear(conn),
                     "ЗАПРОС 7 | Количество авто, прошедших ТО, по годам");
 
@@ -59,9 +56,13 @@ namespace ConsoleADONET
                 Pause("ОПЕРАЦИЯ 10 | Удаление данных о водителе (ID=2)");
                 Console.WriteLine(CommandExamples.DeleteDriver(connection, 2));
 
-                // ПУНКТ 3.3
+                // ПУНКТ 3.3: Атомарность и Rollback
                 Pause("ДЕМОНСТРАЦИЯ 3.3 | Атомарность и откат транзакции");
                 TransactionExamples.DemonstrateAtomicityAndRollback(connection);
+
+                // ПУНКТ 3.4: Уровни изоляции транзакций
+                Pause("ДЕМОНСТРАЦИЯ 3.4 | Уровни изоляции транзакций");
+                RunIsolationLevelDemo(connection);
             }
             catch (SqlException ex)
             {
@@ -74,6 +75,34 @@ namespace ConsoleADONET
 
             Console.WriteLine("\nГотово. Нажмите любую клавишу для выхода.");
             Console.ReadKey();
+        }
+
+        /// <summary>
+        /// Интерактивное меню для запуска теста уровней изоляции в двух экземплярах.
+        /// </summary>
+        static void RunIsolationLevelDemo(SqlConnection connection)
+        {
+            Console.WriteLine("\n--- ТРЕБОВАНИЕ п.3.4: Запустите ДВА экземпляра этого приложения ---");
+            Console.WriteLine("1. В ПЕРВОМ окне выберите режим '1 - Писатель'.");
+            Console.WriteLine("2. Пока первый экземпляр ждет, во ВТОРОМ окне выберите '2' или '3'.");
+            Console.Write("Выберите роль для этого экземпляра (1-Писатель, 2-Читатель ReadCommitted, 3-Читатель ReadUncommitted, 0-Пропуск): ");
+
+            string choice = Console.ReadLine()?.Trim();
+            switch (choice)
+            {
+                case "1":
+                    TransactionExamples.Writer_IsolationTest(connection);
+                    break;
+                case "2":
+                    TransactionExamples.Reader_IsolationTest(connection, IsolationLevel.ReadCommitted);
+                    break;
+                case "3":
+                    TransactionExamples.Reader_IsolationTest(connection, IsolationLevel.ReadUncommitted);
+                    break;
+                default:
+                    Console.WriteLine("3.4 пропущен");
+                    break;
+            }
         }
 
         static void Pause(string description)
