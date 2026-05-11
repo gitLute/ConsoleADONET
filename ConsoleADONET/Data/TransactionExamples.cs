@@ -161,7 +161,7 @@ namespace ConsoleADONET.Data
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ПОТОК А] ❌ Ошибка: {ex.Message}");
+                Console.WriteLine($"[ПОТОК А] Ошибка: {ex.Message}");
                 transaction.Rollback();
             }
         }
@@ -206,7 +206,7 @@ namespace ConsoleADONET.Data
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ПОТОК Б] ❌ Ошибка: {ex.Message}");
+                Console.WriteLine($"[ПОТОК Б] Ошибка: {ex.Message}");
                 transaction.Rollback();
             }
         }
