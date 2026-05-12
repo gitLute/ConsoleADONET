@@ -87,37 +87,42 @@ namespace ConsoleADONET.Data
         public static void Reader_IsolationTest(SqlConnection conn, IsolationLevel level)
         {
             Console.WriteLine($"\n=== [Reader_IsolationTest] Тест уровня изоляции: {level} ===");
-            int testId = GetFirstDriverId(conn);
+
+            // Фиксируем ID=1, так как Писатель блокирует именно эту строку.
+            // Это исключает блокировку на этапе поиска ID через GetFirstDriverId.
+            int testId = 1;
+
+            // Явные табличные подсказки гарантируют поведение независимо от настроек RCSI на сервере
+            string query = level == IsolationLevel.ReadUncommitted
+              ? "SELECT Address FROM Drivers WITH (NOLOCK) WHERE Id = @Id"
+              : "SELECT Address FROM Drivers WITH (READCOMMITTEDLOCK) WHERE Id = @Id";
 
             using var transaction = conn.BeginTransaction(level);
-            using var cmd = new SqlCommand("SELECT Address FROM Drivers WHERE Id = @Id", conn, transaction);
+            using var cmd = new SqlCommand(query, conn, transaction);
             cmd.Parameters.AddWithValue("@Id", testId);
-
-            // Таймаут 5 сек для демонстрации блокировки
-            cmd.CommandTimeout = 5;
+            cmd.CommandTimeout = 5; // 5 сек до таймаута
 
             try
             {
                 Console.WriteLine($"[Reader_IsolationTest] Попытка чтения адреса водителя ID={testId}...");
                 var result = cmd.ExecuteScalar();
                 string address = result?.ToString() ?? "(NULL)";
-
                 Console.WriteLine($"[Reader_IsolationTest] Успешно прочитано: {address}");
+
                 if (level == IsolationLevel.ReadUncommitted)
-                {
                     Console.WriteLine("[Reader_IsolationTest] ГРЯЗНОЕ ЧТЕНИЕ (Dirty Read) сработало!");
-                }
+
                 transaction.Commit();
             }
-            catch (SqlException ex) when (ex.Number == -2) // -2 = Timeout Expired
+            catch (SqlException ex) when (ex.Number == -2 || ex.Message.Contains("Timeout"))
             {
-                Console.WriteLine($"[Reader_IsolationTest] ТАЙМАУТ! Чтение заблокировано.");
-                transaction.Rollback();
+                Console.WriteLine("[Reader_IsolationTest] ТАЙМАУТ! Чтение заблокировано.");
+                try { transaction.Rollback(); } catch { }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[Reader_IsolationTest] Ошибка: {ex.Message}");
-                transaction.Rollback();
+                try { transaction.Rollback(); } catch { }
             }
         }
 
