@@ -38,7 +38,7 @@ namespace ConsoleADONET
                 var carIds = new List<int>();
 
                 Console.WriteLine("Генерация справочников (≥100 записей)...");
-                
+
                 // 1. Positions (100)
                 for (int i = 1; i <= DictCount; i++)
                     posIds.Add(ExecuteInsertSp(conn, tx, "uspInsertPosition",
@@ -94,12 +94,16 @@ namespace ConsoleADONET
                 for (int i = 1; i <= OperCount; i++)
                 {
                     DateTime theftDate = DateTime.Today.AddDays(-rnd.Next(1, 365));
+                    bool isFound = rnd.Next(2) == 1;
+                    object foundDate = isFound ? (object)theftDate.AddDays(rnd.Next(1, 30)) : DBNull.Value;
+
                     ExecuteInsertSp(conn, tx, "uspInsertStolenCar",
                         ("@TheftDate", theftDate),
                         ("@ReportDate", theftDate.AddHours(rnd.Next(1, 12))),
                         ("@CarId", carIds[rnd.Next(carIds.Count)]),
                         ("@TheftCircumstances", circumstances[rnd.Next(circumstances.Length)]),
-                        ("@IsFound", rnd.Next(2) == 1),
+                        ("@IsFound", isFound),
+                        ("@FoundDate", foundDate),
                         ("@RegisteringEmployeeId", empIds[rnd.Next(empIds.Count)]));
                 }
 
@@ -120,7 +124,7 @@ namespace ConsoleADONET
         private static int ExecuteInsertSp(SqlConnection conn, SqlTransaction tx, string spName, params (string Name, object Value)[] parameters)
         {
             using var cmd = new SqlCommand(spName, conn, tx) { CommandType = System.Data.CommandType.StoredProcedure };
-            
+
             foreach (var p in parameters)
                 cmd.Parameters.AddWithValue(p.Name, p.Value ?? DBNull.Value);
 
