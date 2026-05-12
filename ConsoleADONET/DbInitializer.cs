@@ -85,6 +85,7 @@ namespace ConsoleADONET
                         ("@RegistrationNumber", $"{rnd.Next(1000, 9999)} AB-{rnd.Next(1, 8)}"),
                         ("@Color", colors[rnd.Next(colors.Length)]),
                         ("@TechInspectionStatus", "Пройден"),
+                        ("@TechInspectionDate", DateTime.Today.AddDays(-rnd.Next(30, 1800))), 
                         ("@RegisteringEmployeeId", empIds[rnd.Next(empIds.Count)]));
                     carIds.Add(carId);
                 }
