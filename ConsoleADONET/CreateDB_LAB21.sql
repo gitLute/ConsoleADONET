@@ -425,27 +425,25 @@ GO
 IF OBJECT_ID(N'uspUpdateDriver', N'P') IS NOT NULL DROP PROCEDURE uspUpdateDriver;
 GO
 CREATE PROCEDURE uspUpdateDriver
-    @Id INT,
-    @FullName NVARCHAR(150) = NULL,
-    @Address NVARCHAR(200) = NULL,
-    @Phone NVARCHAR(20) = NULL,
-    @LicenseNumber NVARCHAR(50) = NULL,
-    @LicenseExpiryDate DATE = NULL
+  @Id INT,
+  @FullName NVARCHAR(150) = NULL,
+  @Address NVARCHAR(200) = NULL,
+  @LicenseNumber NVARCHAR(50) = NULL,
+  @LicenseExpiryDate DATE = NULL
 AS
 BEGIN
-    SET NOCOUNT ON;
-    BEGIN TRY
-        UPDATE Drivers SET
-            FullName = ISNULL(@FullName, FullName),
-            Address = ISNULL(@Address, Address),
-            PassportDetails = ISNULL(@Phone, PassportDetails),
-            LicenseNumber = ISNULL(@LicenseNumber, LicenseNumber),
-            LicenseExpiryDate = ISNULL(@LicenseExpiryDate, LicenseExpiryDate)
-        WHERE Id = @Id;
-    END TRY
-    BEGIN CATCH
-        THROW;
-    END CATCH
+  SET NOCOUNT ON;
+  BEGIN TRY
+    UPDATE Drivers SET
+      FullName = ISNULL(@FullName, FullName),
+      Address = ISNULL(@Address, Address),
+      LicenseNumber = ISNULL(@LicenseNumber, LicenseNumber),
+      LicenseExpiryDate = ISNULL(@LicenseExpiryDate, LicenseExpiryDate)
+    WHERE Id = @Id;
+  END TRY
+  BEGIN CATCH
+    THROW;
+  END CATCH
 END;
 GO
 
