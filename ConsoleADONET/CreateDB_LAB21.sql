@@ -438,7 +438,7 @@ BEGIN
         UPDATE Drivers SET
             FullName = ISNULL(@FullName, FullName),
             Address = ISNULL(@Address, Address),
-            PassportDetails = ISNULL(@Phone, PassportDetails),
+            -- PassportDetails = ISNULL(@Phone, PassportDetails), -- может вызвать некоректное обновление
             LicenseNumber = ISNULL(@LicenseNumber, LicenseNumber),
             LicenseExpiryDate = ISNULL(@LicenseExpiryDate, LicenseExpiryDate)
         WHERE Id = @Id;
